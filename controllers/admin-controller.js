@@ -146,7 +146,7 @@ const controller = {
    */
   getAllEmployees: async function (req, res, next) {
     try {
-      const employees = await Employee.find().lean();
+      const employees = await Employee.find({}, '-password').lean();
       res.json(employees);
     } catch (err) {
       console.error("[ADMIN][EMPLOYEES][ERROR]", err);
