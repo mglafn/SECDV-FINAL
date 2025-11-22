@@ -1,0 +1,46 @@
+% Preamble: packages and settings for the repository code PDF
+% Load encoding, fonts, and page layout
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+% Links and bookmarks
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue]{hyperref}
+\hypersetup{pdfauthor={Repository Archive},pdftitle={SECDV-FINAL Code Listing}}
+
+% Graphics and colors
+\usepackage{xcolor}
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+
+% Better verbatim/listings support
+\usepackage{listings}
+\usepackage{caption}
+\captionsetup[lstlisting]{font=small,labelfont=bf}
+
+% Listings default style
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codegray},
+  breaklines=true,
+  captionpos=b,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  frame=single,
+  rulecolor=\color{black},
+  columns=fullflexible,
+  showstringspaces=false,
+  tabsize=2,
+  xleftmargin=2pt,
+  xrightmargin=2pt
+}
+
+% Make subsection listings appear in ToC (optional)
+\usepackage{tocloft}
+\setcounter{tocdepth}{2}
+
+% Bibliography (classic BibTeX support)
+% If you want biblatex+biber instead, change this in main.tex and build commands.
+\usepackage{natbib}
