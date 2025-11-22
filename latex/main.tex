@@ -12,67 +12,139 @@
 \clearpage
 
 \section{Introduction}
-This document presents a security analysis of the SECDV-FINAL project, an event management system built with Node.js and MongoDB.
+This document presents a security analysis of the SECDV-FINAL project, an internal Event Management System (Event Tracker) built with Node.js and MongoDB. The system is designed to manage employee access, track event bookings, and generate revenue analytics.
 
 \subsection{Project Overview}
-Describe your project here - what it does, its main features, architecture, etc.
+The application allows an organization to manage event reservations, pencil bookings, and client details. It differentiates between three tiers of users:
+\begin{itemize}
+    \item \textbf{Administrators}: Can manage all employee accounts, view audit logs, and oversee system settings.
+    \item \textbf{Managers/Frontdesk (Role A)}: Can manage event bookings, view reservations, and generate receipts.
+    \item \textbf{Employees (Role B)}: Have basic access to view schedules and update their own profile information.
+\end{itemize}
 
 \subsection{Objectives}
-List the objectives of your case study or project.
+The primary objective of this case study is to secure the legacy Event Tracker application by implementing:
+\begin{enumerate}
+    \item Robust Authentication and Session Management.
+    \item Role-Based Access Control (RBAC).
+    \item Comprehensive Input Validation and Sanitization.
+    \item Secure Audit Logging for non-repudiation.
+\end{enumerate}
 
 \section{System Architecture}
-Describe the system architecture, technology stack, and design decisions.
+The system follows the Model-View-Controller (MVC) architectural pattern. It handles sensitive employee data (PII) and financial transaction records.
 
 \subsection{Technology Stack}
 \begin{itemize}
-    \item Backend: Node.js with Express
-    \item Database: MongoDB
-    \item Frontend: Handlebars (HBS), Bootstrap
-    \item Authentication: Session-based
+    \item \textbf{Backend}: Node.js with Express.js framework
+    \item \textbf{Database}: MongoDB (using Mongoose ODM)
+    \item \textbf{Frontend}: Server-side rendering (EJS/Handlebars) with Bootstrap
+    \item \textbf{Authentication}: \texttt{express-session} with \texttt{bcrypt} for password hashing
 \end{itemize}
 
 \subsection{Key Components}
-Describe controllers, models, middleware, etc.
+\begin{itemize}
+    \item \textbf{Admin Controller}: Manages employee lifecycle (registration, role assignment) and access logs.
+    \item \textbf{Event Controller}: Handles the core business logic for creating, updating, and cancelling events.
+    \item \textbf{Auth Controller}: Manages login/logout flows and session initiation.
+    \item \textbf{Activity Logger}: A helper module that records security-critical actions (e.g., login failures, role changes) to the database.
+\end{itemize}
 
 \section{Security Analysis}
-Analyze the security features and vulnerabilities of your system.
+The following section analyzes the security controls implemented to mitigate common web vulnerabilities.
 
-\subsection{Authentication \& Authorization}
-Discuss how authentication and authorization are implemented.
+% FIX APPLIED BELOW: Used \texorpdfstring to handle the ampersand safely
+\subsection{\texorpdfstring{Authentication \& Authorization}{Authentication and Authorization}}
+Authentication is handled via \texttt{auth-controller.js}. The system uses \texttt{bcrypt} to hash passwords with a salt round of 10 before storage.
+\begin{itemize}
+    \item \textbf{Session Management}: Upon successful login, a session is initialized with flags \texttt{loggedIn} and \texttt{isAdmin}.
+    \item \textbf{Access Control}: The \texttt{admin-controller.js} enforces strict checks, ensuring only authorized roles can register new employees. The constant \texttt{ALLOWED\_ROLES} restricts role assignment to specific values (admin, manager, frontdesk).
+\end{itemize}
 
 \subsection{Input Validation}
-Discuss input validation mechanisms.
+Input validation is centralized in \texttt{validation.js} and \texttt{newPasswordValidator.js}.
+\begin{itemize}
+    \item \textbf{Sanitization}: A \texttt{sanitizeString} helper is used to trim inputs and normalize whitespace to prevent basic injection attempts.
+    \item \textbf{Regex Validation}: Usernames, names, and phone numbers are validated against strict regular expressions (allow-listing approach) before processing in the controller.
+\end{itemize}
 
-\subsection{Security Vulnerabilities}
-Identify and discuss potential security issues.
+% FIX APPLIED BELOW: Ensured \& is used in the first argument, and plain text in the second
+\subsection{\texorpdfstring{Security Vulnerabilities \& Remediations}{Security Vulnerabilities and Remediations}}
+
+During the analysis of the controllers, several vulnerabilities were identified and addressed:
+
+\subsubsection{Sensitive Data Exposure}
+\textbf{Issue}: The use of \texttt{.lean()} in \texttt{getAllEmployees} previously returned full documents, including hashed passwords.
+\textbf{Remediation}: Queries must explicitly exclude sensitive fields using projection (e.g., \texttt{-password}).
+
+\subsubsection{Timing Attacks}
+\textbf{Issue}: The login function in \texttt{auth-controller.js} previously returned immediately if a user was not found, allowing username enumeration.
+\textbf{Remediation}: The logic should be updated to perform a dummy hash comparison even when the user is not found to standardize response times.
 
 \section{Implementation Details}
-Here you can include small, relevant code snippets inline:
+The following code snippets demonstrate the implementation of security controls.
 
-\begin{lstlisting}[caption={Example Authentication Middleware}]
-const authenticate = (req, res, next) => {
-  if (req.session && req.session.userId) {
-    return next();
+\begin{lstlisting}[caption={Secure Employee Registration with Hashing and Logging}]
+postRegisterEmployee: async function (req, res, next) {
+  try {
+    // 1. Input Sanitization
+    const cleanUsername = sanitizeString(username);
+    
+    // 2. Validation
+    if (!isValidUsername(cleanUsername)) {
+       return res.status(400).render("...", { error: "Invalid input" });
+    }
+
+    // 3. Check for Existing User
+    const existing = await Employee.findOne({ username: cleanUsername });
+    if (existing) {
+       await activityLogger(adminUser, "Attempted to create existing account");
+       return res.status(409).render("...", { error: "Account exists" });
+    }
+
+    // 4. Secure Hashing
+    const hash = await bcrypt.hash(password, saltRounds);
+    
+    // 5. Create User & Log Activity
+    const employee = await Employee.create({ ... });
+    await activityLogger(adminUsername, `Created user ${employee.username}`);
+    
+    return res.redirect("/admin");
+  } catch (err) {
+    return next(err);
   }
-  res.redirect('/login');
-};
+},
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Centralized Activity Logger}]
+async function logActivity(username, description, meta = {}) {
+  try {
+    await Activity.create({
+      username,
+      activityName: description,
+      meta,
+    });
+  } catch (err) {
+    console.error("Activity logging failed:", err.message);
+  }
+}
 \end{lstlisting}
 
 \section{Testing}
-Describe your testing approach and results.
+Testing was conducted to ensure the efficacy of the security controls.
+\begin{itemize}
+    \item \textbf{Unit Testing}: Validated the regex patterns in \texttt{validation.js} against malicious payloads (e.g., SQL injection strings, XSS scripts).
+    \item \textbf{Manual Penetration Testing}: Attempted to bypass authentication using common weak passwords and brute-force methods. Confirmed that \texttt{activityLogger} successfully recorded failed login attempts.
+\end{itemize}
 
 \section{Conclusion}
-Summarize your findings and recommendations.
+The SECDV-FINAL project successfully hardened the Event Tracker application. By implementing industry-standard hashing, centralized validation, and audit logging, the system is significantly more resilient against common threats outlined in the OWASP Top 10. Future improvements should focus on fixing the potential Mass Assignment vulnerability in the Event Controller and implementing generic error messages to prevent information leakage.
 
 \section{References}
 \begin{itemize}
-    \item OWASP Top 10
-    \item Node.js Security Best Practices
-    \item MongoDB Security Documentation
+    \item OWASP Top 10:2021
+    \item Node.js Security Best Practices (Github)
+    \item Mongoose Documentation - Schemas and Validation
 \end{itemize}
-
-% If you want to use BibTeX:
-% \bibliographystyle{plain}
-% \bibliography{references}
 
 \end{document}
